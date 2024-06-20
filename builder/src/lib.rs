@@ -8,7 +8,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let name = input.ident;
     let builder_ident = format_ident!("{}Builder", name);
-    let builder_def = convert_to_option(
+    let builder_def = map_struct_fields(
         &input.data,
         |f| {
             let name = &f.ident;
@@ -20,7 +20,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         true,
     );
 
-    let builder_init = convert_to_option(
+    let builder_init = map_struct_fields(
         &input.data,
         |f| {
             let name = &f.ident;
@@ -31,7 +31,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         true,
     );
 
-    let builder_impl = convert_to_option(
+    let builder_setters = map_struct_fields(
         &input.data,
         |f| {
             let name = &f.ident;
@@ -46,6 +46,17 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         false,
     );
 
+    let builder_build = map_struct_fields(
+        &input.data,
+        |f| {
+            let name = &f.ident;
+            quote! {
+                #name: self.#name.clone().ok_or("Field not set")?
+            }
+        },
+        true,
+    );
+
     let expanded = quote! {
         pub struct #builder_ident {
             #builder_def
@@ -58,14 +69,19 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
         impl #builder_ident {
-            #builder_impl
+            #builder_setters
+            pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
+                Ok(#name {
+                    #builder_build
+                })
+            }
         }
     };
 
     proc_macro::TokenStream::from(expanded)
 }
 
-fn convert_to_option(
+fn map_struct_fields(
     data: &Data,
     f: impl FnMut(&Field) -> TokenStream,
     comma: bool,
